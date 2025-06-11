@@ -3,6 +3,6 @@ import { Injectable } from '@nestjs/common';
 @Injectable()
 export class AppService {
   getHello(): string {
-    return 'Hello World!';
+    return '<html><body><h1>Hello World!</h1><p>Welcome to the EC2 NestJS Application</p></body></html>';
   }
 }
