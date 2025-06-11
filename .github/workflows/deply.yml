@@ -1,0 +1,47 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy via SSH
+        run: |
+          ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+            cd ~/my-nest-app
+
+            # Pull latest code
+            git pull origin main
+
+            # Build new Docker image (If fails, exit without stopping the app)
+            docker build -t my-nest-app-new . || exit 1
+
+            # Run new container (without stopping the current one)
+            docker run -d -p 3000:3000 --name nest-app-new my-nest-app-new
+
+            # Check if new app is running properly
+            sleep 10
+            docker ps | grep "nest-app-new" || exit 1
+
+            # Stop and remove old container only if new one is running fine
+            docker stop nest-app || true
+            docker rm nest-app || true
+
+            # Rename new container to replace the old one
+            docker rename nest-app-new nest-app
+          EOF
