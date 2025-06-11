@@ -23,25 +23,40 @@ jobs:
       - name: Deploy via SSH
         run: |
           ssh ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+            set -e
+
             cd ~/my-nest-app
 
-            # Pull latest code
+            echo "📦 Pulling latest code"
             git pull origin main
 
-            # Build new Docker image (If fails, exit without stopping the app)
-            docker build -t my-nest-app-new . || exit 1
+            echo "🐳 Building new Docker image"
+            docker build -t my-nest-app-new .
 
-            # Run new container (without stopping the current one)
-            docker run -d -p 3000:3000 --name nest-app-new my-nest-app-new
+            echo "🚀 Running new container temporarily on port 3001"
+            docker run -d -p 3001:3000 --name nest-app-temp my-nest-app-new
 
-            # Check if new app is running properly
+            echo "⏱️ Waiting for app to become ready"
             sleep 10
-            docker ps | grep "nest-app-new" || exit 1
 
-            # Stop and remove old container only if new one is running fine
+            echo "🔍 Checking if new container is healthy"
+            curl -f http://localhost:3001 || {
+              echo "❌ Health check failed. Aborting deployment."
+              docker stop nest-app-temp || true
+              docker rm nest-app-temp || true
+              exit 1
+            }
+
+            echo "🛑 Stopping and removing old container (nest-app)"
             docker stop nest-app || true
             docker rm nest-app || true
 
-            # Rename new container to replace the old one
-            docker rename nest-app-new nest-app
+            echo "✅ Starting new container on port 3000"
+            docker stop nest-app-temp
+            docker rm nest-app-temp
+            docker run -d -p 3000:3000 --name nest-app my-nest-app-new
+
+            echo "✅ Deployment complete!"
           EOF
+
+          echo "✅ Deployment complete!"
